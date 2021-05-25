@@ -1,31 +1,56 @@
 #include "c_wrapper_nav2/nav2_client.hpp"
 #include "c_wrapper_nav2/c_wrapper_nav2.h"
 
-std::shared_ptr<c_wrapper_nav2::Nav2Client> g_nav_client;
+using c_wrapper_nav2::Nav2Client;
+std::shared_ptr<Nav2Client> g_nav_client;
 
-void nav2_init()
+int nav2_init()
 {
     if (!g_nav_client)
     {
         rclcpp::NodeOptions option;
         g_nav_client = std::make_shared<c_wrapper_nav2::Nav2Client>(option);
-    }
-}
-
-void nav2_send_goal(const double x, const double y, const double theta)
-{
-    g_nav_client->send_goal(x, y, theta);
-    rclcpp::spin_some(g_nav_client);
-}
-
-int nav2_is_succeeded()
-{
-    if (g_nav_client->is_succeeded())
-    {
-        return 1;
-    }
-    else
-    {
         return 0;
+    } else {
+        RCLCPP_ERROR(g_nav_client->get_logger(), "Multiple nav2 is not supported yet");;
+        return -1;
     }
+}
+
+int nav2_send_goal(const double x, const double y, const double theta)
+{
+    if (!g_nav_client) {
+        std::cerr << "call nav2_init() before" << std::endl;
+        return -10;
+    }
+    if (g_nav_client->send_goal(x, y, theta) != 0) {
+        std::cerr << "failed to send goal" << std::endl;
+        return -1;
+    }
+    rclcpp::spin_some(g_nav_client);
+    return 0;
+}
+
+int nav2_wait_until_reach(const double timeout_sec)
+{
+    if (!g_nav_client) {
+        std::cerr << "call nav2_init() before" << std::endl;
+        return -10;
+    }
+    return Nav2Client::wait_until_reach(g_nav_client, timeout_sec);
+}
+
+int nav2_cancel_all_goals() {
+    if (!g_nav_client) {
+        std::cerr << "call nav2_init() before" << std::endl;
+        return -10;
+    }
+    if (g_nav_client->cancel_all_goals()) {
+        rclcpp::spin_some(g_nav_client);
+    } else {
+        std::cerr << "failed to cancel" << std::endl;
+        return -10;
+    }
+
+    return 0;
 }

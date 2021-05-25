@@ -2,7 +2,10 @@
 
 extern "C"
 {
-    void nav2_init();
-    void nav2_send_goal(const double x, const double y, const double theta);
-    int nav2_is_succeeded();
+    int nav2_init();
+    // @return 0 means success to send goal
+    int nav2_send_goal(const double x, const double y, const double theta);
+    // @return 0 means success
+    int nav2_wait_until_reach(const double timeout_sec);
+    int nav2_cancel_all_goals();
 }
