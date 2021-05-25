@@ -11,23 +11,21 @@ namespace c_wrapper_nav2
     public:
         using NavigateToPose = nav2_msgs::action::NavigateToPose;
         using GoalHandleNavigateToPose = rclcpp_action::ClientGoalHandle<NavigateToPose>;
-
+        using Future = std::shared_future<GoalHandleNavigateToPose::SharedPtr>;
         explicit Nav2Client(const rclcpp::NodeOptions &options);
-        void send_goal(double x, double y, double theta);
-        bool is_succeeded() const
-        {
-            return m_is_succeeded;
-        };
+        bool send_goal(double x, double y, double theta);
+        bool cancel_all_goals();
+        // @return 0 success: negative: fail
+        // @return -1 canceled
+        // @return -2 timeout
+        static int wait_until_reach(const std::shared_ptr<Nav2Client> &node, const double timeout_sec);
+        const Future &get_goal_handle_future() {
+            return m_goal_handle_future;
+        }
 
     private:
         rclcpp_action::Client<NavigateToPose>::SharedPtr client_ptr_;
-        bool m_is_succeeded;
-
-        void goal_response_callback(std::shared_future<GoalHandleNavigateToPose::SharedPtr> future);
-        void feedback_callback(
-            GoalHandleNavigateToPose::SharedPtr,
-            const std::shared_ptr<const NavigateToPose::Feedback> feedback);
-        void result_callback(const GoalHandleNavigateToPose::WrappedResult &result);
+        Future m_goal_handle_future;
     };
 
 } // namespace nav2_client

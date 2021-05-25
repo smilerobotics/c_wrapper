@@ -12,87 +12,62 @@ namespace c_wrapper_nav2
     Nav2Client::Nav2Client(const rclcpp::NodeOptions &options)
         : Node("nav2_client", options)
     {
-        printf("init1\n");
         this->client_ptr_ = rclcpp_action::create_client<NavigateToPose>(
             this,
             "navigate_to_pose");
-        printf("init2\n");
-        //this->timer_ = this->create_wall_timer(
-        //std::chrono::milliseconds(500),
-        //std::bind(&Nav2Client::send_goal, this));
     }
 
-    void Nav2Client::send_goal(const double x, const double y, const double theta)
+    bool Nav2Client::send_goal(const double x, const double y, const double theta)
     {
         using namespace std::placeholders;
-        //this->timer_->cancel();
-        printf("hogehogeo\n");
         if (!this->client_ptr_->wait_for_action_server())
         {
             RCLCPP_ERROR(this->get_logger(), "Action server not available after waiting");
-            rclcpp::shutdown();
+            return false;
         }
-        m_is_succeeded = false;
 
         auto goal_msg = NavigateToPose::Goal();
         goal_msg.pose.pose.position.x = x;
         goal_msg.pose.pose.position.y = y;
-        // TODO: theta
+        goal_msg.pose.pose.orientation.w = std::cos(theta * 0.5);
+        goal_msg.pose.pose.orientation.z = std::sin(theta * 0.5);
 
         RCLCPP_INFO(this->get_logger(), "Sending goal");
 
         auto send_goal_options = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
-        send_goal_options.goal_response_callback =
-            std::bind(&Nav2Client::goal_response_callback, this, _1);
-        send_goal_options.feedback_callback =
-            std::bind(&Nav2Client::feedback_callback, this, _1, _2);
-        send_goal_options.result_callback =
-            std::bind(&Nav2Client::result_callback, this, _1);
-        this->client_ptr_->async_send_goal(goal_msg, send_goal_options);
+
+        m_goal_handle_future = this->client_ptr_->async_send_goal(goal_msg, send_goal_options);
+        return true;
     }
 
-    void Nav2Client::goal_response_callback(std::shared_future<GoalHandleNavigateToPose::SharedPtr> future)
-    {
-        auto goal_handle = future.get();
-        if (!goal_handle)
-        {
-            RCLCPP_ERROR(this->get_logger(), "Goal was rejected by server");
-        }
-        else
-        {
-            RCLCPP_INFO(this->get_logger(), "Goal accepted by server, waiting for result");
-        }
+    bool Nav2Client::cancel_all_goals() {
+        this->client_ptr_->async_cancel_all_goals();
+        return true;
     }
 
-    void Nav2Client::feedback_callback(
-        GoalHandleNavigateToPose::SharedPtr,
-        const std::shared_ptr<const NavigateToPose::Feedback> feedback)
+    int wait_until_reach(const std::shared_ptr<Nav2Client> &node, const double timeout_sec) {
     {
-        (void)feedback;
-        RCLCPP_INFO(this->get_logger(), "feedback");
-    }
-
-    void Nav2Client::result_callback(const GoalHandleNavigateToPose::WrappedResult &result)
-    {
-        switch (result.code)
+        auto result = rclcpp::spin_until_future_complete(node, node->get_goal_handle_future(), std::chrono::duration<double>(timeout_sec));
+        switch (result)
         {
-        case rclcpp_action::ResultCode::SUCCEEDED:
-            m_is_succeeded = true;
+        case  rclcpp::FutureReturnCode::SUCCESS:
+            return 0;
             break;
-        case rclcpp_action::ResultCode::ABORTED:
-            RCLCPP_ERROR(this->get_logger(), "Goal was aborted");
-            return;
-        case rclcpp_action::ResultCode::CANCELED:
-            RCLCPP_ERROR(this->get_logger(), "Goal was canceled");
-            return;
+        case rclcpp::FutureReturnCode::INTERRUPTED:
+            RCLCPP_ERROR(node->get_logger(), "Goal was interrupted");
+            return -1;
+        case rclcpp::FutureReturnCode::TIMEOUT:
+            RCLCPP_ERROR(node->get_logger(), "Goal was timeouted");
+            return -2;
         default:
-            RCLCPP_ERROR(this->get_logger(), "Unknown result code");
-            return;
+            RCLCPP_ERROR(node->get_logger(), "Unknown result code");
+            return -3;
         }
         std::stringstream ss;
         ss << "Result received: ";
         //ss << result.result->distance_remaining;
-        RCLCPP_INFO(this->get_logger(), ss.str().c_str());
+        RCLCPP_INFO(node->get_logger(), ss.str().c_str());
+    }
     }
 } // namespace c_wrapper_nav2
 
